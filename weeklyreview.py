@@ -6,15 +6,16 @@ from datetime import date
 from datetime import timedelta
 from calendar import monthrange
 import monthdelta
-from pprint import pprint
 
 # day_of_month = datetime.now().day
 # week_number = (day_of_month - 1) // 7 + 1
 
-re_day_mon_yr = '[0-9]+(d|D|m|M|y|Y|w|W)'
-re_weekday = '(daily)|(first|second|third|fourth|fifth)-(sunday|monday|tuesday|wednesday|thursday|friday|saturday)|(sunday|monday|tuesday|wednesday|thursday|friday|saturday)'
+RE_DAY_MON_YR = '[0-9]+(d|D|m|M|y|Y|w|W)'
+RE_WEEKDAY = '(daily)|(first|second|third|fourth|fifth)-(sunday|monday|' + \
+             'tuesday|wednesday|thursday|friday|saturday)|' + \
+             '(sunday|monday|tuesday|wednesday|thursday|friday|saturday)'
 
-month_array_cache = {}
+MONTH_ARRAY_CACHE = {}
 
 DAYS = {
     'monday': 1,
@@ -32,12 +33,12 @@ def make_montharray(year, month):
         year,
         month,
     )
-    res = month_array_cache.get(mac_key)
+    res = MONTH_ARRAY_CACHE.get(mac_key)
     if res is None:
         res = {}
         aday = date(year=year, month=month, day=1)
         for i in range(1, monthrange(year, month)[1]):
-            if aday.isoweekday() in res.keys():
+            if aday.isoweekday() in list(res.keys()):
                 res[aday.isoweekday()].append(aday)
             else:
                 res[aday.isoweekday()] = [
@@ -46,7 +47,7 @@ def make_montharray(year, month):
             aday = date(year=year, month=month, day=1) + timedelta(i)
         # Last item got left out somehow
         res[aday.isoweekday()].append(aday)
-        month_array_cache[mac_key] = res
+        MONTH_ARRAY_CACHE[mac_key] = res
     return res
 
 
@@ -60,13 +61,13 @@ def make_dayofweek():
     ]
     dofw = {}
     dayofweek = 0
-    for of in one_five:
+    for one_five in one_five:
         dayofweek += 1
-        for wd in DAYS.keys():
-            akey = '{0}-{1}'.format(of, wd)
+        for week_day in list(DAYS.keys()):
+            akey = '{0}-{1}'.format(one_five, week_day)
             dofw[akey] = (
                 dayofweek,
-                DAYS[wd],
+                DAYS[week_day],
             )
     return dofw
 
@@ -103,7 +104,7 @@ def RepeatDateInRange(start, delta):
     saturday = date.today() + timedelta((6 - date.today().isoweekday()) % 7)
     if start <= date.today():
         check = start
-        while (check < sunday):
+        while check < sunday:
             check += delta
         if (sunday <= check) and (check <= saturday):
             return check
@@ -113,7 +114,7 @@ def RepeatDateInRange(start, delta):
 def SingleDateInRange(start):
     sunday = date.today() - timedelta(date.today().isoweekday() % 7)
     saturday = date.today() + timedelta((6 - date.today().isoweekday()) % 7)
-    return ((sunday <= start) and (start <= saturday))
+    return (sunday <= start) and (start <= saturday)
 
 
 def CleanTaskLine(ticklerwords):
@@ -126,7 +127,7 @@ def CleanTaskLine(ticklerwords):
 
     outwords = [
         outword for outword in ticklerwords
-        if len(filter(outword.startswith, skip_words)) == 0
+        if len(list(filter(outword.startswith, skip_words))) == 0
     ]
     return outwords
 
@@ -161,8 +162,6 @@ def GetWeeknumber(adate):
         else:
             count += 1
     return 0
-    #day_of_month = adate.day
-    # return ((day_of_month - 1) // 7 + 1)
 
 
 def PrepareWeekList(sunday, saturday):
@@ -179,13 +178,13 @@ def PrepareWeekList(sunday, saturday):
 
 def ParseWeekday(weekdaytxt):
     sunday = date.today() - timedelta(date.today().isoweekday() % 7)
-    if weekdaytxt in DAYS.keys():
+    if weekdaytxt in list(DAYS.keys()):
         startday = sunday + timedelta(days=DAYS[weekdaytxt])
         return (
             startday,
             startday + timedelta(days=1),
         )
-    elif weekdaytxt in DAYOFWEEK.keys():
+    elif weekdaytxt in list(DAYOFWEEK.keys()):
         thisweek = PrepareWeekList(sunday, sunday + timedelta(days=6))
         if DAYOFWEEK[weekdaytxt] in thisweek:
             startday = sunday + timedelta(days=DAYOFWEEK[weekdaytxt][1])
@@ -217,8 +216,7 @@ def ParseRepeat(start, repeatxt):
                 resp,
                 resp,
             )
-        else:
-            return None
+        return None
     else:
         return ParseWeekday(delta_obj)
 
@@ -226,12 +224,11 @@ def ParseRepeat(start, repeatxt):
 def ProcessTicklerFile(aFile, todoFile, TodoContent):
     processed = 0
     firsttime = True
-    repeat_re_txt = '^repeat:(({0})|{1})'.format(re_day_mon_yr, re_weekday)
+    repeat_re_txt = '^repeat:(({0})|{1})'.format(RE_DAY_MON_YR, RE_WEEKDAY)
     repeat_re = re.compile(repeat_re_txt)
     #    '^repeat:[0-9]+(d|D|m|M|y|Y)')
-    start_re = re.compile(
-        '^start:(19|20)\d\d[- /.](0[1-9]|1[012])[- /.](0[1-9]|[12][0-9]|3[01])$'
-    )
+    start_re = re.compile('^start:(19|20)\d\d[- /.](0[1-9]|1[012])[- /.]' +
+                          '(0[1-9]|[12][0-9]|3[01])$')
 
     with open(aFile, 'r') as infile, open(todoFile, 'a') as todo:
         for aline in infile:
@@ -265,19 +262,19 @@ def ProcessTicklerFile(aFile, todoFile, TodoContent):
                             processed += 1
                         # This tickler item will never get triggered anymore
                         elif startdate < date.today():
-                            print'Please remove from tickler : {0}'.format(
-                                aline)
+                            print('Please remove from tickler : {0}'.format(
+                                aline))
 
-    print'Added {0} item{1} from the tickler file'.format(
-        processed, 's' if processed > 1 else '')
+    print('Added {0} item{1} from the tickler file'.format(
+        processed, 's' if processed > 1 else ''))
 
 
 def LoadFile(aFile):
     lines = []
     totalprojects = set()
     totalcontexts = set()
-    with open(aFile, 'r') as f:
-        for aline in f:
+    with open(aFile, 'r') as fhandle:
+        for aline in fhandle:
             thisline = {}
             projects, contexts, duedates = FindProjectsAndContexts(aline)
             thisline['projects'] = projects
