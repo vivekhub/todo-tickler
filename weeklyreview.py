@@ -1,10 +1,11 @@
 #!/usr/bin/env python
+# Standard Library
+from calendar import monthrange
+from datetime import date, datetime, timedelta
 import re
 import time
-from datetime import datetime
-from datetime import date
-from datetime import timedelta
-from calendar import monthrange
+
+# Project specific libraries
 import monthdelta
 
 # day_of_month = datetime.now().day
@@ -79,41 +80,60 @@ def FindProjectsAndContexts(aline):
     ticklerwords = aline.split()
     projects = [aword for aword in ticklerwords if aword[0] == '+']
     contexts = [aword for aword in ticklerwords if aword[0] == '@']
+
     # Got the regexp from  http://www.regular-expressions.info/dates.html
     comp_re = re.compile(
         '^due:(19|20)\d\d[- /.](0[1-9]|1[012])[- /.](0[1-9]|[12][0-9]|3[01])$')
+
+    task_id_re = re.compile('^id:[0-9|a-z]+$')
+    task_dep_ids_re = re.compile('^dep:[0-9|a-z]+$')
 
     duedates = [
         aword for aword in ticklerwords if comp_re.match(aword) is not None
     ]
 
+    task_id = [
+        aword for aword in ticklerwords if task_id_re.match(aword) is not None
+    ]
+
+    task_dep_ids = [
+        aword for aword in ticklerwords
+        if task_dep_ids_re.match(aword) is not None
+    ]
     ActualDates = [
         datetime.strptime(adate.split(':')[1], '%Y-%m-%d')
         for adate in duedates
     ]
     # clean up duplicates and return
-    return (
-        set(projects),
-        set(contexts),
-        set(ActualDates),
-    )
+    return (set(projects), set(contexts), set(ActualDates), task_id[0]
+            if task_id else None, set(task_dep_ids))
 
 
-def RepeatDateInRange(start, delta):
+def RepeatDateInRange(start, delta, end=None):
     sunday = date.today() - timedelta(date.today().isoweekday() % 7)
-    saturday = date.today() + timedelta((6 - date.today().isoweekday()) % 7)
+    if end and end < sunday:
+        return None
+    saturday = end if end else date.today() + timedelta(
+        (6 - date.today().isoweekday()) % 7)
+    if end:
+        print("start: " + str(sunday) + "  end :" + str(saturday))
     if start <= date.today():
         check = start
         while check < sunday:
             check += delta
+        if end:
+            print('Check date is ' + str(check))
         if (sunday <= check) and (check <= saturday):
             return check
     return None
 
 
-def SingleDateInRange(start):
+def SingleDateInRange(start, end):
     sunday = date.today() - timedelta(date.today().isoweekday() % 7)
-    saturday = date.today() + timedelta((6 - date.today().isoweekday()) % 7)
+    if end and end < sunday:
+        return False
+    saturday = end if end else date.today() + timedelta(
+        (6 - date.today().isoweekday()) % 7)
     return (sunday <= start) and (start <= saturday)
 
 
@@ -195,7 +215,7 @@ def ParseWeekday(weekdaytxt):
     return None
 
 
-def ParseRepeat(start, repeatxt):
+def ParseRepeat(start, repeatxt, end):
     repeatxt = repeatxt.lower()
     delta_obj = repeatxt.split(':')[1]
     if delta_obj[0].isdigit():
@@ -210,7 +230,7 @@ def ParseRepeat(start, repeatxt):
             delta = monthdelta.monthdelta(repeat_num * 12)
         elif delta_obj[-1] == 'w':
             delta = timedelta(days=7)
-        resp = RepeatDateInRange(start, delta)
+        resp = RepeatDateInRange(start, delta, end=end)
         if resp:
             return (
                 resp,
@@ -230,6 +250,8 @@ def ProcessTicklerFile(aFile, todoFile, TodoContent):
     start_re = re.compile('^start:(19|20)\d\d[- /.](0[1-9]|1[012])[- /.]' +
                           '(0[1-9]|[12][0-9]|3[01])$')
 
+    end_re = re.compile('^end:(19|20)\d\d[- /.](0[1-9]|1[012])[- /.]' +
+                        '(0[1-9]|[12][0-9]|3[01])$')
     with open(aFile, 'r') as infile, open(todoFile, 'a') as todo:
         for aline in infile:
             ticklerwords = aline.split()
@@ -243,19 +265,31 @@ def ProcessTicklerFile(aFile, todoFile, TodoContent):
                 start_date_list = [
                     aword for aword in ticklerwords if start_re.match(aword)
                 ]
+                end_date_list = [
+                    aword for aword in ticklerwords if end_re.match(aword)
+                ]
+                enddate = None
+                if end_date_list:
+                    end_date_str = end_date_list[0].split(':')[1]
+                    enddate = datetime.date(
+                        datetime.strptime(end_date_str, '%Y-%m-%d'))
+                    if date.today() > enddate:
+                        print('Please remove from tickler : {0}'.format(aline))
+                        continue
                 if len(start_date_list) > 0:
                     start_date_str = start_date_list[0].split(':')[1]
                     startdate = datetime.date(
                         datetime.strptime(start_date_str, '%Y-%m-%d'))
                     if len(repeat_word) > 0:
-                        keydates = ParseRepeat(startdate, repeat_word[0])
+                        keydates = ParseRepeat(startdate, repeat_word[0],
+                                               enddate)
                         if keydates:
                             InsertTaskLine(todo, outwords, keydates[0],
                                            keydates[1], firsttime)
                             firsttime = False
                             processed += 1
                     else:  # This is a onetime tickler
-                        if SingleDateInRange(startdate):
+                        if SingleDateInRange(startdate, enddate):
                             InsertTaskLine(todo, outwords, startdate,
                                            startdate, firsttime)
                             firsttime = False
@@ -276,10 +310,13 @@ def LoadFile(aFile):
     with open(aFile, 'r') as fhandle:
         for aline in fhandle:
             thisline = {}
-            projects, contexts, duedates = FindProjectsAndContexts(aline)
+            projects, contexts, duedates, myid, deps = FindProjectsAndContexts(
+                aline)
             thisline['projects'] = projects
             thisline['contexts'] = contexts
             thisline['duedates'] = duedates
+            thisline['id'] = myid
+            thisline['deps'] = deps
             thisline['line'] = aline
             thisline['closed'] = (aline[0] == 'x')
             lines.append(thisline)
