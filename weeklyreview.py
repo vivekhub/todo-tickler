@@ -115,14 +115,10 @@ def RepeatDateInRange(start, delta, end=None):
         return None
     saturday = end if end else date.today() + timedelta(
         (6 - date.today().isoweekday()) % 7)
-    if end:
-        print("start: " + str(sunday) + "  end :" + str(saturday))
     if start <= date.today():
         check = start
         while check < sunday:
             check += delta
-        if end:
-            print('Check date is ' + str(check))
         if (sunday <= check) and (check <= saturday):
             return check
     return None
