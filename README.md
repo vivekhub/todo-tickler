@@ -2,7 +2,16 @@
 Automated tickler file processing
 
 This python script will process a tickler.txt that has been created according
-to the format specified in [GTD todo.txt : tickler file proposal] (https://medium.com/@criticalmind/gtd-todo-tickler-proposal-fe18ab324bca).  
+to the format specified in [GTD todo.txt : tickler file proposal](https://medium.com/@criticalmind/gtd-todo-tickler-proposal-fe18ab324bca).  
+
+Installation
+------------
+
+Create a virtualenv (this project has one dependancy)
+
+    pip install -r requrirements.txt
+
+Thats it you are ready to go.
 
 Usage
 -----
@@ -17,3 +26,13 @@ it does the following.
 *  Looks at the tickler.txt file and find out possible actionable items for the upcoming week and appends them to todo.txt
 
 It supports all the repeat scenarios outlined in the blog post.
+
+Open Items
+----------
+* Support for specifying the directory containing todo.txt files (Typically dropbox folder)
+* Support for direct integration with Dropbox through their API
+
+License
+-------
+
+This code is made available under MIT license.  Copyright 2019, Vivek Venugopalan
