@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # Standard Library
+import sys
 from calendar import monthrange
 from datetime import date, datetime, timedelta
 import re
@@ -248,78 +249,96 @@ def ProcessTicklerFile(aFile, todoFile, TodoContent):
 
     end_re = re.compile('^end:(19|20)\d\d[- /.](0[1-9]|1[012])[- /.]' +
                         '(0[1-9]|[12][0-9]|3[01])$')
-    with open(aFile, 'r') as infile, open(todoFile, 'a') as todo:
-        for aline in infile:
-            ticklerwords = aline.split()
-            # get rid of the t: and due:
-            outwords = CleanTaskLine(ticklerwords)
-            # Check if we already have it in todo.txt
-            if not MatchLineFuzzy(TodoContent, outwords):
-                repeat_word = [
-                    aword for aword in ticklerwords if repeat_re.match(aword)
-                ]
-                start_date_list = [
-                    aword for aword in ticklerwords if start_re.match(aword)
-                ]
-                end_date_list = [
-                    aword for aword in ticklerwords if end_re.match(aword)
-                ]
-                enddate = None
-                if end_date_list:
-                    end_date_str = end_date_list[0].split(':')[1]
-                    enddate = datetime.date(
-                        datetime.strptime(end_date_str, '%Y-%m-%d'))
-                    if date.today() > enddate:
-                        print('Please remove from tickler : {0}'.format(aline))
-                        continue
-                if len(start_date_list) > 0:
-                    start_date_str = start_date_list[0].split(':')[1]
-                    startdate = datetime.date(
-                        datetime.strptime(start_date_str, '%Y-%m-%d'))
-                    if len(repeat_word) > 0:
-                        keydates = ParseRepeat(startdate, repeat_word[0],
-                                               enddate)
-                        if keydates:
-                            InsertTaskLine(todo, outwords, keydates[0],
-                                           keydates[1], firsttime)
-                            firsttime = False
-                            processed += 1
-                    else:  # This is a onetime tickler
-                        if SingleDateInRange(startdate, enddate):
-                            InsertTaskLine(todo, outwords, startdate,
-                                           startdate, firsttime)
-                            firsttime = False
-                            processed += 1
-                        # This tickler item will never get triggered anymore
-                        elif startdate < date.today():
+
+    try:
+        with open(aFile, 'r') as infile, open(todoFile, 'a') as todo:
+            for aline in infile:
+                ticklerwords = aline.split()
+                # get rid of the t: and due:
+                outwords = CleanTaskLine(ticklerwords)
+                # Check if we already have it in todo.txt
+                if not MatchLineFuzzy(TodoContent, outwords):
+                    repeat_word = [
+                        aword for aword in ticklerwords
+                        if repeat_re.match(aword)
+                    ]
+                    start_date_list = [
+                        aword for aword in ticklerwords
+                        if start_re.match(aword)
+                    ]
+                    end_date_list = [
+                        aword for aword in ticklerwords if end_re.match(aword)
+                    ]
+                    enddate = None
+                    if end_date_list:
+                        end_date_str = end_date_list[0].split(':')[1]
+                        enddate = datetime.date(
+                            datetime.strptime(end_date_str, '%Y-%m-%d'))
+                        if date.today() > enddate:
                             print('Please remove from tickler : {0}'.format(
                                 aline))
+                            continue
+                    if len(start_date_list) > 0:
+                        start_date_str = start_date_list[0].split(':')[1]
+                        startdate = datetime.date(
+                            datetime.strptime(start_date_str, '%Y-%m-%d'))
+                        if len(repeat_word) > 0:
+                            keydates = ParseRepeat(startdate, repeat_word[0],
+                                                   enddate)
+                            if keydates:
+                                InsertTaskLine(todo, outwords, keydates[0],
+                                               keydates[1], firsttime)
+                                firsttime = False
+                                processed += 1
+                        else:  # This is a onetime tickler
+                            if SingleDateInRange(startdate, enddate):
+                                InsertTaskLine(todo, outwords, startdate,
+                                               startdate, firsttime)
+                                firsttime = False
+                                processed += 1
+                            # This tickler item will never get triggered anymore
+                            elif startdate < date.today():
+                                print(
+                                    'Please remove from tickler : {0}'.format(
+                                        aline))
+    except OSError as e:
+        print('Unable to find file exiting : %s' % e)
+        sys.exit(1)
 
     print('Added {0} item{1} from the tickler file'.format(
         processed, 's' if processed > 1 else ''))
 
 
-def LoadFile(aFile):
+def LoadTodoFile(aFile, quit_not_found=False, empty_not_found=True):
     lines = []
     totalprojects = set()
     totalcontexts = set()
-    with open(aFile, 'r') as fhandle:
-        for aline in fhandle:
-            thisline = {}
-            projects, contexts, duedates, myid, deps = FindProjectsAndContexts(
-                aline)
-            thisline['projects'] = projects
-            thisline['contexts'] = contexts
-            thisline['duedates'] = duedates
-            thisline['id'] = myid
-            thisline['deps'] = deps
-            thisline['line'] = aline
-            thisline['closed'] = (aline[0] == 'x')
-            lines.append(thisline)
-            for p in projects:
-                totalprojects.add(p)
-            for c in contexts:
-                totalcontexts.add(c)
+    try:
+        with open(aFile, 'r') as fhandle:
+            for aline in fhandle:
+                thisline = {}
+                projects, contexts, duedates, myid, deps = FindProjectsAndContexts(
+                    aline)
+                thisline['projects'] = projects
+                thisline['contexts'] = contexts
+                thisline['duedates'] = duedates
+                thisline['id'] = myid
+                thisline['deps'] = deps
+                thisline['line'] = aline
+                thisline['closed'] = (aline[0] == 'x')
+                lines.append(thisline)
+                for p in projects:
+                    totalprojects.add(p)
+                for c in contexts:
+                    totalcontexts.add(c)
+    except OSError as e:
+        if quit_not_found:
+            print("Unable to find %s exiting" % format(aFile))
+            sys.exit(1)
+
+        if not empty_not_found:
+            raise e
+
     return (
         totalprojects,
         totalcontexts,
@@ -329,16 +348,22 @@ def LoadFile(aFile):
 
 if __name__ == "__main__":
     DAYOFWEEK = make_dayofweek()
-    TodoFile = LoadFile('todo.txt')
+    TodoFile = LoadTodoFile('todo.txt', quit_not_found=True)
     ProcessTicklerFile('tickler.txt', 'todo.txt', TodoFile)
-    TodoFile = LoadFile('todo.txt')
-    DoneFile = LoadFile('done.txt')
-    TicklerFile = LoadFile('tickler.txt')
+
+    #Reload the TodoFile for reprocessing
+    TodoFile = LoadTodoFile('todo.txt')
+
+    DoneFile = LoadTodoFile('done.txt', empty_not_found=True)
     doneprojects = DoneFile[0]
+
+    TicklerFile = LoadTodoFile('tickler.txt', empty_not_found=True)
+
     for item in TodoFile[2]:
         if item['closed']:
             doneprojects.update(item['projects'])
-    DoneProjectsFile = LoadFile('project.done.txt')
+
+    DoneProjectsFile = LoadTodoFile('project.done.txt', empty_not_found=True)
 
     # Check for projects that we have to work on...
     doneprojects.difference_update(TodoFile[0])
