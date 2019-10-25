@@ -12,6 +12,9 @@ import monthdelta
 # day_of_month = datetime.now().day
 # week_number = (day_of_month - 1) // 7 + 1
 
+RE_DUE_DATE = re.compile(
+    '^due:(19|20)\d\d[- /.](0[1-9]|1[012])[- /.](0[1-9]|[12][0-9]|3[01])$')
+
 RE_DAY_MON_YR = '[0-9]+(d|D|m|M|y|Y|w|W)'
 RE_WEEKDAY = '(daily)|(first|second|third|fourth|fifth)-(sunday|monday|' + \
              'tuesday|wednesday|thursday|friday|saturday)|' + \
@@ -83,14 +86,11 @@ def FindProjectsAndContexts(aline):
     contexts = [aword for aword in ticklerwords if aword[0] == '@']
 
     # Got the regexp from  http://www.regular-expressions.info/dates.html
-    comp_re = re.compile(
-        '^due:(19|20)\d\d[- /.](0[1-9]|1[012])[- /.](0[1-9]|[12][0-9]|3[01])$')
-
     task_id_re = re.compile('^id:[0-9|a-z]+$')
     task_dep_ids_re = re.compile('^dep:[0-9|a-z]+$')
 
     duedates = [
-        aword for aword in ticklerwords if comp_re.match(aword) is not None
+        aword for aword in ticklerwords if RE_DUE_DATE.match(aword) is not None
     ]
 
     task_id = [
@@ -126,13 +126,18 @@ def RepeatDateInRange(start, delta, end=None):
 
 
 def SingleDateInRange(start, end):
-    sunday = date.today() - timedelta(date.today().isoweekday() % 7)
-    if end and end < sunday:
-        return False
-    saturday = end if end else date.today() + timedelta(
-        (6 - date.today().isoweekday()) % 7)
-    return (sunday <= start) and (start <= saturday)
+    '''
+    Return 0 if end date is less than today's date.  Return 1 if if
+    start<today<end and return 2 if start> today 
+    '''
+    # IF the date has passed say not possible
+    if end and end < date.today():
+        return 0
 
+    if start:
+        return 1 if start < date.today() else 2
+
+    return 0
 
 def CleanTaskLine(ticklerwords):
     skip_words = [
@@ -291,13 +296,26 @@ def ProcessTicklerFile(aFile, todoFile, TodoContent):
                                 firsttime = False
                                 processed += 1
                         else:  # This is a onetime tickler
-                            if SingleDateInRange(startdate, enddate):
+                            duedates = [
+                                datetime.strptime(
+                                    aword.split(':')[1], '%Y-%m-%d').date()
+                                for aword in ticklerwords
+                                if RE_DUE_DATE.match(aword) is not None
+                            ]
+                            enddate = enddate if enddate else duedates[
+                                0] if duedates else None
+
+                            if enddate and startdate and startdate > enddate:
+                                print( 'Something is wrong StartDate > End/Due date : %s' % aline) 
+                                continue
+                            next_step = SingleDateInRange(startdate, enddate)
+                            if next_step == 1:
                                 InsertTaskLine(todo, outwords, startdate,
-                                               startdate, firsttime)
+                                               enddate, firsttime)
                                 firsttime = False
                                 processed += 1
-                            # This tickler item will never get triggered anymore
-                            elif startdate < date.today():
+                            elif next_step == 0:
+                                # This tickler item will never get triggered anymore
                                 print(
                                     'Please remove from tickler : {0}'.format(
                                         aline))
