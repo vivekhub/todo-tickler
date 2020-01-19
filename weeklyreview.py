@@ -139,7 +139,6 @@ def SingleDateInRange(start, end):
 
     return 0
 
-
 def CleanTaskLine(ticklerwords):
     skip_words = [
         'start:',
