@@ -128,7 +128,7 @@ def RepeatDateInRange(start, delta, end=None):
 def SingleDateInRange(start, end):
     '''
     Return 0 if end date is less than today's date.  Return 1 if if
-    start<today<end and return 2 if start> today 
+    start<today<end and return 2 if start> today
     '''
     # IF the date has passed say not possible
     if end and end < date.today():
@@ -138,6 +138,7 @@ def SingleDateInRange(start, end):
         return 1 if start < date.today() else 2
 
     return 0
+
 
 def CleanTaskLine(ticklerwords):
     skip_words = [
@@ -167,8 +168,10 @@ def MatchLineFuzzy(TodoContent, words):
 
 def InsertTaskLine(todo, outwords, startdate, duedate, firsttime):
     outwords.insert(0, date.today().strftime('%Y-%m-%d'))
-    outwords.append('due:{0}'.format(duedate.strftime('%Y-%m-%d')))
-    outwords.append('t:{0}'.format(startdate.strftime('%Y-%m-%d')))
+    if duedate:
+        outwords.append('due:{0}'.format(duedate.strftime('%Y-%m-%d')))
+    if startdate:
+        outwords.append('t:{0}'.format(startdate.strftime('%Y-%m-%d')))
     outwords.append('\n')
     if firsttime:
         todo.write('\n')
@@ -302,11 +305,18 @@ def ProcessTicklerFile(aFile, todoFile, TodoContent):
                                 for aword in ticklerwords
                                 if RE_DUE_DATE.match(aword) is not None
                             ]
+                            # if there is an end date, use it, if not check if
+                            # there is a due date and use it. Otherwise since
+                            # this is a single item tickler, assume end date is
+                            # 1 week from start date
                             enddate = enddate if enddate else duedates[
-                                0] if duedates else None
+                                0] if duedates else startdate + timedelta(
+                                    days=7)
 
                             if enddate and startdate and startdate > enddate:
-                                print( 'Something is wrong StartDate > End/Due date : %s' % aline) 
+                                print(
+                                    'Something is wrong StartDate > End/Due date : %s'
+                                    % aline)
                                 continue
                             next_step = SingleDateInRange(startdate, enddate)
                             if next_step == 1:
