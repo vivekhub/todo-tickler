@@ -105,3 +105,4 @@ venv.bak/
 
 # Project specific
 test/
+.DS_Store
